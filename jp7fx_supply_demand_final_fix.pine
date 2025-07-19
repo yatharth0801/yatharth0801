@@ -1,0 +1,79 @@
+//@version=6
+indicator('Supply & Demand - No Movement Fix', overlay=true, max_boxes_count=50)
+
+// Settings
+pivotLength = input.int(5, "Pivot Length", minval=2, maxval=20)
+maxZones = input.int(3, "Max Zones", minval=1, maxval=10)
+
+// Colors
+supplyColor = color.new(color.red, 80)
+demandColor = color.new(color.blue, 80)
+
+// Variables to store zone data
+var float[] supplyTops = array.new<float>()
+var float[] supplyBottoms = array.new<float>()
+var int[] supplyBars = array.new<int>()
+var box[] supplyBoxes = array.new<box>()
+
+var float[] demandTops = array.new<float>()
+var float[] demandBottoms = array.new<float>()
+var int[] demandBars = array.new<int>()
+var box[] demandBoxes = array.new<box>()
+
+// Pivot detection
+pivotHigh = ta.pivothigh(high, pivotLength, pivotLength)
+pivotLow = ta.pivotlow(low, pivotLength, pivotLength)
+
+// When a new pivot high is detected (Supply zone)
+if not na(pivotHigh)
+    // Store the exact price values as constants
+    exactTop = pivotHigh
+    exactBottom = pivotHigh * 0.9995
+    exactBar = bar_index - pivotLength
+    
+    // Remove oldest if at capacity
+    if array.size(supplyBoxes) >= maxZones
+        oldBox = array.shift(supplyBoxes)
+        box.delete(oldBox)
+        array.shift(supplyTops)
+        array.shift(supplyBottoms)
+        array.shift(supplyBars)
+    
+    // Store the exact values
+    array.push(supplyTops, exactTop)
+    array.push(supplyBottoms, exactBottom)
+    array.push(supplyBars, exactBar)
+    
+    // Create box with these exact values
+    newBox = box.new(exactBar, exactTop, exactBar + 1, exactBottom, bgcolor=supplyColor, border_color=color.red, extend=extend.right)
+    array.push(supplyBoxes, newBox)
+    
+    // Add label
+    label.new(exactBar, exactTop, "SUPPLY", style=label.style_label_down, color=color.red, textcolor=color.white)
+
+// When a new pivot low is detected (Demand zone)
+if not na(pivotLow)
+    // Store the exact price values as constants
+    exactBottom = pivotLow
+    exactTop = pivotLow * 1.0005
+    exactBar = bar_index - pivotLength
+    
+    // Remove oldest if at capacity
+    if array.size(demandBoxes) >= maxZones
+        oldBox = array.shift(demandBoxes)
+        box.delete(oldBox)
+        array.shift(demandTops)
+        array.shift(demandBottoms)
+        array.shift(demandBars)
+    
+    // Store the exact values
+    array.push(demandTops, exactTop)
+    array.push(demandBottoms, exactBottom)
+    array.push(demandBars, exactBar)
+    
+    // Create box with these exact values
+    newBox = box.new(exactBar, exactTop, exactBar + 1, exactBottom, bgcolor=demandColor, border_color=color.blue, extend=extend.right)
+    array.push(demandBoxes, newBox)
+    
+    // Add label
+    label.new(exactBar, exactBottom, "DEMAND", style=label.style_label_up, color=color.blue, textcolor=color.white)
