@@ -220,7 +220,8 @@ createZone(isSupply, zoneTop, zoneBottom, barIdx, tf = "") =>
             label.delete(oldestZone.labelId)
         array.remove(currentZones, 0)
     
-    rightBar = bar_index + 50
+    // Use extend.right to make zones extend infinitely to the right
+    // This prevents zones from moving with the chart
     
     // Choose colors based on timeframe and type
     boxColor = isSupply ? supplyColor : demandColor
@@ -232,12 +233,12 @@ createZone(isSupply, zoneTop, zoneBottom, barIdx, tf = "") =>
     else if tf == htf2 and enableHTF2
         boxColor := isSupply ? supplyHTF2Color : demandHTF2Color
     
-    // Create box
-    boxId = box.new(barIdx, zoneTop, rightBar, zoneBottom, bgcolor=boxColor, border_color=borderColor, border_width=1)
+    // Create box with extend.right so it doesn't move with chart
+    boxId = box.new(barIdx, zoneTop, barIdx + 1, zoneBottom, bgcolor=boxColor, border_color=borderColor, border_width=1, extend=extend.right)
     
-    // Create 50% line
+    // Create 50% line with extend.right
     fiftyLevel = (zoneTop + zoneBottom) / 2
-    fiftyLine = show50Percent ? line.new(barIdx, fiftyLevel, rightBar, fiftyLevel, color=fiftyColor, style=line.style_dashed, width=1) : na
+    fiftyLine = show50Percent ? line.new(barIdx, fiftyLevel, barIdx + 1, fiftyLevel, color=fiftyColor, style=line.style_dashed, width=1, extend=extend.right) : na
     
     // Create label
     labelText = isSupply ? "S" : "D"
@@ -246,21 +247,14 @@ createZone(isSupply, zoneTop, zoneBottom, barIdx, tf = "") =>
     
     labelId = label.new(barIdx, isSupply ? zoneTop : zoneBottom, labelText, style=isSupply ? label.style_label_down : label.style_label_up, color=boxColor, textcolor=color.white, size=size.small)
     
-    // Create zone object
-    newZone = Zone.new(zoneTop, zoneBottom, barIdx, rightBar, 1, isSupply, tf, boxId, fiftyLine, labelId, false)
+    // Create zone object - no need to track rightBar anymore
+    newZone = Zone.new(zoneTop, zoneBottom, barIdx, barIdx + 1, 1, isSupply, tf, boxId, fiftyLine, labelId, false)
     array.push(currentZones, newZone)
     
     newZone
 
-// Update zone extensions
-updateZoneExtensions() =>
-    if array.size(currentZones) > 0
-        for i = 0 to array.size(currentZones) - 1
-            zone = array.get(currentZones, i)
-            if not na(zone.boxId)
-                box.set_right(zone.boxId, bar_index + 50)
-            if not na(zone.fiftyLine)
-                line.set_x2(zone.fiftyLine, bar_index + 50)
+// Update zone extensions - No longer needed with extend.right
+// updateZoneExtensions() => na
 
 // Check zone mitigation
 checkZoneMitigation() =>
@@ -392,8 +386,7 @@ if htf2Valid and barstate.isconfirmed
         zoneTop = zoneBottom * 1.003  // Thicker HTF2 zones
         zone = createZone(false, zoneTop, zoneBottom, bar_index, htf2)
 
-// Update zone extensions and check mitigation
-updateZoneExtensions()
+// Check zone mitigation
 checkZoneMitigation()
 
 // Bar coloring
