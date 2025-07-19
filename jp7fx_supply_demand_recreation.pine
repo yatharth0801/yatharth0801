@@ -119,29 +119,43 @@ getPriceForDrawing(isHigh) =>
     else
         isHigh ? math.max(open, close) : math.min(open, close)
 
-// Swing detection
+// Swing detection - More accurate like JP7FX
 isSwingHigh(index) =>
-    if index < pivotPeriod or index > bar_index - pivotPeriod
+    if index < pivotPeriod or bar_index < index + pivotPeriod
         false
     else
         highPrice = getPriceForDetection(true)[index]
         isHigh = true
+        // Check left side
         for i = 1 to pivotPeriod
-            if highPrice <= getPriceForDetection(true)[index - i] or highPrice <= getPriceForDetection(true)[index + i]
+            if highPrice <= getPriceForDetection(true)[index + i]
                 isHigh := false
                 break
+        // Check right side only if left side passed
+        if isHigh
+            for i = 1 to pivotPeriod
+                if highPrice <= getPriceForDetection(true)[index - i]
+                    isHigh := false
+                    break
         isHigh
 
 isSwingLow(index) =>
-    if index < pivotPeriod or index > bar_index - pivotPeriod
+    if index < pivotPeriod or bar_index < index + pivotPeriod
         false
     else
         lowPrice = getPriceForDetection(false)[index]
         isLow = true
+        // Check left side
         for i = 1 to pivotPeriod
-            if lowPrice >= getPriceForDetection(false)[index - i] or lowPrice >= getPriceForDetection(false)[index + i]
+            if lowPrice >= getPriceForDetection(false)[index + i]
                 isLow := false
                 break
+        // Check right side only if left side passed
+        if isLow
+            for i = 1 to pivotPeriod
+                if lowPrice >= getPriceForDetection(false)[index - i]
+                    isLow := false
+                    break
         isLow
 
 // Zone strength calculation
@@ -285,56 +299,59 @@ checkZoneMitigation() =>
 // MAIN LOGIC
 // ========================================
 
-// Current timeframe zone detection
+// Current timeframe zone detection - Only check recent swing points
 if barstate.isconfirmed
-    // Supply zones
-    for i = pivotPeriod to math.min(200, bar_index - pivotPeriod)
-        if isSwingHigh(i)
-            zoneTop = getPriceForDrawing(true)[i]
-            zoneBottom = zoneTop * 0.999  // 0.1% zone thickness
-            strength = calculateZoneStrength(zoneTop, zoneBottom)
-            
-            if strength >= zoneStrengthMin
-                zone = createZone(true, zoneTop, zoneBottom, bar_index - i)
-                if alertOnZoneCreation
-                    alert("New supply zone created at " + str.tostring(zoneTop), alert.freq_once_per_bar)
-    
-    // Demand zones
-    for i = pivotPeriod to math.min(200, bar_index - pivotPeriod)
-        if isSwingLow(i)
-            zoneBottom = getPriceForDrawing(false)[i]
-            zoneTop = zoneBottom * 1.001  // 0.1% zone thickness
-            strength = calculateZoneStrength(zoneTop, zoneBottom)
-            
-            if strength >= zoneStrengthMin
-                zone = createZone(false, zoneTop, zoneBottom, bar_index - i)
-                if alertOnZoneCreation
-                    alert("New demand zone created at " + str.tostring(zoneBottom), alert.freq_once_per_bar)
-
-// Order Block detection
-if showOrderBlocks and barstate.isconfirmed
-    for i = 2 to math.min(50, bar_index - 2)
-        if isBullishOrderBlock(i)
-            obHigh = high[i]
-            obLow = low[i]
-            labelId = label.new(bar_index - i, obLow, "BOB", style=label.style_label_up, color=bullishOBColor, textcolor=color.white, size=size.small)
-            
-            ob = OrderBlock.new(obHigh, obLow, bar_index - i, true, labelId)
-            array.push(orderBlocks, ob)
-            
-            if alertOnOrderBlock
-                alert("Bullish Order Block detected", alert.freq_once_per_bar)
+    // Check for new swing highs (Supply zones)
+    if isSwingHigh(pivotPeriod)
+        zoneTop = getPriceForDrawing(true)[pivotPeriod]
+        zoneBottom = zoneTop * 0.9995  // Thicker zone for better visibility
+        strength = calculateZoneStrength(zoneTop, zoneBottom)
         
-        if isBearishOrderBlock(i)
-            obHigh = high[i]
-            obLow = low[i]
-            labelId = label.new(bar_index - i, obHigh, "SOB", style=label.style_label_down, color=bearishOBColor, textcolor=color.white, size=size.small)
-            
-            ob = OrderBlock.new(obHigh, obLow, bar_index - i, false, labelId)
-            array.push(orderBlocks, ob)
-            
-            if alertOnOrderBlock
-                alert("Bearish Order Block detected", alert.freq_once_per_bar)
+        if strength >= zoneStrengthMin
+            swingBarIndex = bar_index - pivotPeriod
+            zone = createZone(true, zoneTop, zoneBottom, swingBarIndex)
+            if alertOnZoneCreation
+                alert("New supply zone created at " + str.tostring(zoneTop), alert.freq_once_per_bar)
+    
+    // Check for new swing lows (Demand zones)
+    if isSwingLow(pivotPeriod)
+        zoneBottom = getPriceForDrawing(false)[pivotPeriod]
+        zoneTop = zoneBottom * 1.0005  // Thicker zone for better visibility
+        strength = calculateZoneStrength(zoneTop, zoneBottom)
+        
+        if strength >= zoneStrengthMin
+            swingBarIndex = bar_index - pivotPeriod
+            zone = createZone(false, zoneTop, zoneBottom, swingBarIndex)
+            if alertOnZoneCreation
+                alert("New demand zone created at " + str.tostring(zoneBottom), alert.freq_once_per_bar)
+
+// Order Block detection - Check recent patterns
+if showOrderBlocks and barstate.isconfirmed
+    // Check for bullish order block (looking back 2 bars)
+    if isBullishOrderBlock(2)
+        obHigh = high[2]
+        obLow = low[2]
+        obBarIndex = bar_index - 2
+        labelId = label.new(obBarIndex, obLow, "BOB", style=label.style_label_up, color=bullishOBColor, textcolor=color.white, size=size.small)
+        
+        ob = OrderBlock.new(obHigh, obLow, obBarIndex, true, labelId)
+        array.push(orderBlocks, ob)
+        
+        if alertOnOrderBlock
+            alert("Bullish Order Block detected", alert.freq_once_per_bar)
+    
+    // Check for bearish order block (looking back 2 bars)
+    if isBearishOrderBlock(2)
+        obHigh = high[2]
+        obLow = low[2]
+        obBarIndex = bar_index - 2
+        labelId = label.new(obBarIndex, obHigh, "SOB", style=label.style_label_down, color=bearishOBColor, textcolor=color.white, size=size.small)
+        
+        ob = OrderBlock.new(obHigh, obLow, obBarIndex, false, labelId)
+        array.push(orderBlocks, ob)
+        
+        if alertOnOrderBlock
+            alert("Bearish Order Block detected", alert.freq_once_per_bar)
 
 // Higher Timeframe Analysis - Move request.security outside conditionals
 // Only request HTF data if timeframes are valid and higher than current
@@ -348,31 +365,31 @@ htf2Valid = enableHTF2 and timeframe.in_seconds() < timeframe.in_seconds(htf2)
 [htf2High, htf2Low, htf2Close, htf2Open] = request.security(syminfo.tickerid, htf2, [high, low, close, open])
 
 // HTF1 Analysis
-if htf1Valid
-    // HTF Supply zones
+if htf1Valid and barstate.isconfirmed
+    // HTF Supply zones - only create on HTF high change
     if ta.change(htfHigh) != 0 and htfHigh > htfHigh[1]
         zoneTop = htfHigh
-        zoneBottom = zoneTop * 0.998
+        zoneBottom = zoneTop * 0.9985  // Slightly thicker HTF zones
         zone = createZone(true, zoneTop, zoneBottom, bar_index, htf1)
     
-    // HTF Demand zones  
+    // HTF Demand zones - only create on HTF low change
     if ta.change(htfLow) != 0 and htfLow < htfLow[1]
         zoneBottom = htfLow
-        zoneTop = zoneBottom * 1.002
+        zoneTop = zoneBottom * 1.0015  // Slightly thicker HTF zones
         zone = createZone(false, zoneTop, zoneBottom, bar_index, htf1)
 
 // HTF2 Analysis
-if htf2Valid
-    // HTF2 Supply zones
+if htf2Valid and barstate.isconfirmed
+    // HTF2 Supply zones - only create on HTF2 high change
     if ta.change(htf2High) != 0 and htf2High > htf2High[1]
         zoneTop = htf2High
-        zoneBottom = zoneTop * 0.997
+        zoneBottom = zoneTop * 0.997  // Thicker HTF2 zones
         zone = createZone(true, zoneTop, zoneBottom, bar_index, htf2)
     
-    // HTF2 Demand zones
+    // HTF2 Demand zones - only create on HTF2 low change
     if ta.change(htf2Low) != 0 and htf2Low < htf2Low[1]
         zoneBottom = htf2Low
-        zoneTop = zoneBottom * 1.003
+        zoneTop = zoneBottom * 1.003  // Thicker HTF2 zones
         zone = createZone(false, zoneTop, zoneBottom, bar_index, htf2)
 
 // Update zone extensions and check mitigation
