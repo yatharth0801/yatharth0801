@@ -1,0 +1,283 @@
+//@version=6
+indicator('Supply & Demand / OrderBlocks - MTF [JP7FX Recreation - FINAL]', overlay=true, max_boxes_count=500, max_labels_count=500, max_lines_count=500)
+
+// ========================================
+// INPUTS & SETTINGS
+// ========================================
+
+// Main Settings
+group_main = "Main Settings"
+pivotPeriod = input.int(5, "Pivot Period", minval=1, group=group_main, tooltip="Period for swing high/low detection")
+zoneStrengthMin = input.int(1, "Minimum Zone Strength", minval=1, group=group_main, tooltip="Minimum touches required for zone validity")
+maxZones = input.int(10, "Maximum Zones", minval=1, maxval=50, group=group_main, tooltip="Maximum number of zones to display")
+
+// Zone Creation Method
+group_creation = "Zone Creation Method"
+useWickForDetection = input.bool(false, "Use Wick for Zone Detection", group=group_creation, tooltip="Use wick instead of open/close for zone detection")
+useWickForDrawing = input.bool(false, "Use Wick for Zone Drawing", group=group_creation, tooltip="Draw zones from wick levels instead of open/close")
+
+// Order Blocks
+group_ob = "Order Blocks"
+showOrderBlocks = input.bool(true, "Show Order Blocks", group=group_ob)
+obMinImbalance = input.float(0.1, "Minimum Imbalance %", minval=0.01, maxval=5.0, step=0.01, group=group_ob, tooltip="Minimum imbalance percentage for order block validation")
+
+// Multi-Timeframe
+group_mtf = "Multi-Timeframe"
+enableHTF1 = input.bool(true, "Enable Higher Timeframe 1", group=group_mtf)
+htf1 = input.timeframe("240", "Higher Timeframe 1", group=group_mtf, tooltip="4H = 240, 1H = 60, 15m = 15, etc.")
+enableHTF2 = input.bool(false, "Enable Higher Timeframe 2", group=group_mtf)
+htf2 = input.timeframe("1D", "Higher Timeframe 2", group=group_mtf, tooltip="Daily = 1D, Weekly = 1W, Monthly = 1M")
+
+// Zone Management
+group_management = "Zone Management"
+show50Percent = input.bool(true, "Show 50% Mitigation Lines", group=group_management)
+deleteOnMitigation = input.bool(true, "Delete Zones on Full Mitigation", group=group_management)
+
+// Colors - Supply Zones
+group_supply_colors = "Supply Zone Colors"
+supplyColor = input.color(color.new(color.red, 85), "Supply Zone", group=group_supply_colors)
+supplyBorderColor = input.color(color.red, "Supply Border", group=group_supply_colors)
+supplyHTF1Color = input.color(color.new(color.maroon, 80), "Supply HTF1", group=group_supply_colors)
+supply50Color = input.color(color.new(color.red, 60), "Supply 50% Line", group=group_supply_colors)
+
+// Colors - Demand Zones
+group_demand_colors = "Demand Zone Colors"
+demandColor = input.color(color.new(color.blue, 85), "Demand Zone", group=group_demand_colors)
+demandBorderColor = input.color(color.blue, "Demand Border", group=group_demand_colors)
+demandHTF1Color = input.color(color.new(color.navy, 80), "Demand HTF1", group=group_demand_colors)
+demand50Color = input.color(color.new(color.blue, 60), "Demand 50% Line", group=group_demand_colors)
+
+// Colors - Order Blocks
+group_ob_colors = "Order Block Colors"
+bullishOBColor = input.color(color.new(color.green, 70), "Bullish Order Block", group=group_ob_colors)
+bearishOBColor = input.color(color.new(color.orange, 70), "Bearish Order Block", group=group_ob_colors)
+
+// ========================================
+// TYPES & VARIABLES
+// ========================================
+
+type ZoneInfo
+    float top
+    float bottom
+    int startTime
+    bool isSupply
+    string timeframe
+    bool mitigated = false
+    int touches = 1
+
+type Zone
+    ZoneInfo info
+    box zoneBox = na
+    line fiftyLine = na
+    label zoneLabel = na
+
+// Arrays to store zones
+var array<Zone> allZones = array.new<Zone>()
+
+// ========================================
+// UTILITY FUNCTIONS
+// ========================================
+
+// Function to get price for zone detection
+getPriceForDetection(isHigh) =>
+    if useWickForDetection
+        isHigh ? high : low
+    else
+        isHigh ? math.max(open, close) : math.min(open, close)
+
+// Function to get price for zone drawing
+getPriceForDrawing(isHigh) =>
+    if useWickForDrawing
+        isHigh ? high : low
+    else
+        isHigh ? math.max(open, close) : math.min(open, close)
+
+// Create box with proper xloc.bar_time (like the working example)
+createZoneBox(boxColor, borderColor) =>
+    box.new(na, na, na, na, xloc=xloc.bar_time, extend=extend.right, bgcolor=boxColor, border_color=borderColor, border_width=1)
+
+// Create line with proper xloc.bar_time
+createZoneLine(lineColor) =>
+    line.new(na, na, na, na, xloc=xloc.bar_time, extend=extend.right, color=lineColor, style=line.style_dashed, width=1)
+
+// Safe delete zone function (like the working example)
+safeDeleteZone(Zone zoneObj) =>
+    box.delete(zoneObj.zoneBox)
+    line.delete(zoneObj.fiftyLine)
+    label.delete(zoneObj.zoneLabel)
+
+// Move box function (like the working example)
+moveBox(boxObj, leftTime, topPrice, rightTime, bottomPrice) =>
+    box.set_lefttop(boxObj, leftTime, topPrice)
+    box.set_rightbottom(boxObj, rightTime, bottomPrice)
+
+// Move line function (like the working example)
+moveLine(lineObj, x1, y1, x2, y2) =>
+    line.set_xy1(lineObj, x1, y1)
+    line.set_xy2(lineObj, x2, y2)
+
+// Create and render a zone (using time-based coordinates)
+createZone(isSupply, zoneTop, zoneBottom, zoneTime, tf = "") =>
+    // Remove oldest zone if at capacity
+    if array.size(allZones) >= maxZones
+        oldestZone = array.shift(allZones)
+        safeDeleteZone(oldestZone)
+    
+    // Choose colors based on timeframe and type
+    boxColor = isSupply ? supplyColor : demandColor
+    borderColor = isSupply ? supplyBorderColor : demandBorderColor
+    fiftyColor = isSupply ? supply50Color : demand50Color
+    
+    if tf == htf1 and enableHTF1
+        boxColor := isSupply ? supplyHTF1Color : demandHTF1Color
+    
+    // Create zone info
+    info = ZoneInfo.new(zoneTop, zoneBottom, zoneTime, isSupply, tf)
+    
+    // Create zone objects using time-based coordinates (KEY FIX!)
+    newZone = Zone.new(info)
+    newZone.zoneBox := createZoneBox(boxColor, borderColor)
+    
+    if show50Percent
+        newZone.fiftyLine := createZoneLine(fiftyColor)
+    
+    // Set the box coordinates using TIME (not bar_index)
+    rightTime = time + 50 * timeframe.in_seconds(timeframe.period) * 1000
+    moveBox(newZone.zoneBox, zoneTime, zoneTop, rightTime, zoneBottom)
+    
+    // Set 50% line coordinates using TIME
+    if show50Percent
+        fiftyLevel = (zoneTop + zoneBottom) / 2
+        moveLine(newZone.fiftyLine, zoneTime, fiftyLevel, rightTime, fiftyLevel)
+    
+    // Create label
+    labelText = isSupply ? "S" : "D"
+    if tf != ""
+        labelText += " " + tf
+    
+    newZone.zoneLabel := label.new(zoneTime, isSupply ? zoneTop : zoneBottom, labelText, 
+                                  xloc=xloc.bar_time, 
+                                  style=isSupply ? label.style_label_down : label.style_label_up, 
+                                  color=boxColor, textcolor=color.white, size=size.small)
+    
+    // Add to array
+    array.push(allZones, newZone)
+    
+    newZone
+
+// Swing detection using ta.pivothigh/ta.pivotlow (like the working example)
+pivotHigh = ta.pivothigh(high, pivotPeriod, pivotPeriod)
+pivotLow = ta.pivotlow(low, pivotPeriod, pivotPeriod)
+
+// Zone strength calculation
+calculateZoneStrength(zoneTop, zoneBottom) =>
+    touches = 0
+    lookback = math.min(500, bar_index)
+    for i = 0 to lookback
+        if high[i] >= zoneBottom and low[i] <= zoneTop
+            touches += 1
+    touches
+
+// Order Block detection
+isBullishOrderBlock(index) =>
+    if index < 2
+        false
+    else
+        prevCandle = index + 1
+        currentCandle = index
+        
+        prevRed = close[prevCandle] < open[prevCandle]
+        currentGreen = close[currentCandle] > open[currentCandle]
+        
+        if prevRed and currentGreen
+            imbalance = (low[currentCandle] - high[prevCandle]) / high[prevCandle] * 100
+            imbalance >= obMinImbalance
+        else
+            false
+
+isBearishOrderBlock(index) =>
+    if index < 2
+        false
+    else
+        prevCandle = index + 1
+        currentCandle = index
+        
+        prevGreen = close[prevCandle] > open[prevCandle]
+        currentRed = close[currentCandle] < open[currentCandle]
+        
+        if prevGreen and currentRed
+            imbalance = (low[prevCandle] - high[currentCandle]) / low[prevCandle] * 100
+            imbalance >= obMinImbalance
+        else
+            false
+
+// ========================================
+// MAIN LOGIC
+// ========================================
+
+// HTF Data
+htf1Valid = enableHTF1 and timeframe.in_seconds() < timeframe.in_seconds(htf1)
+[htfHigh, htfLow] = htf1Valid ? request.security(syminfo.tickerid, htf1, [high, low]) : [na, na]
+
+// Current timeframe zone detection using pivots (like the working example)
+if not na(pivotHigh) and barstate.isconfirmed
+    swingPrice = pivotHigh
+    swingTime = time[pivotPeriod]  // Use TIME instead of bar_index
+    
+    zoneTop = swingPrice
+    zoneBottom = swingPrice * 0.9995
+    strength = calculateZoneStrength(zoneTop, zoneBottom)
+    
+    if strength >= zoneStrengthMin
+        zone = createZone(true, zoneTop, zoneBottom, swingTime)
+
+if not na(pivotLow) and barstate.isconfirmed
+    swingPrice = pivotLow
+    swingTime = time[pivotPeriod]  // Use TIME instead of bar_index
+    
+    zoneBottom = swingPrice
+    zoneTop = swingPrice * 1.0005
+    strength = calculateZoneStrength(zoneTop, zoneBottom)
+    
+    if strength >= zoneStrengthMin
+        zone = createZone(false, zoneTop, zoneBottom, swingTime)
+
+// Order Block detection
+if showOrderBlocks and barstate.isconfirmed
+    if isBullishOrderBlock(2)
+        obTime = time[2]  // Use TIME instead of bar_index
+        label.new(obTime, low[2], "BOB", xloc=xloc.bar_time, style=label.style_label_up, color=bullishOBColor, textcolor=color.white, size=size.small)
+    
+    if isBearishOrderBlock(2)
+        obTime = time[2]  // Use TIME instead of bar_index
+        label.new(obTime, high[2], "SOB", xloc=xloc.bar_time, style=label.style_label_down, color=bearishOBColor, textcolor=color.white, size=size.small)
+
+// HTF Analysis
+if htf1Valid and barstate.isconfirmed
+    if ta.change(htfHigh) != 0 and htfHigh > htfHigh[1]
+        zoneTop = htfHigh
+        zoneBottom = zoneTop * 0.9985
+        zone = createZone(true, zoneTop, zoneBottom, time, htf1)
+    
+    if ta.change(htfLow) != 0 and htfLow < htfLow[1]
+        zoneBottom = htfLow
+        zoneTop = zoneBottom * 1.0015
+        zone = createZone(false, zoneTop, zoneBottom, time, htf1)
+
+// Zone mitigation check
+if array.size(allZones) > 0
+    for i = array.size(allZones) - 1 to 0
+        zone = array.get(allZones, i)
+        if not zone.info.mitigated
+            if zone.info.isSupply
+                if low <= zone.info.bottom
+                    zone.info.mitigated := true
+                    if deleteOnMitigation
+                        safeDeleteZone(zone)
+                        array.remove(allZones, i)
+            else
+                if high >= zone.info.top
+                    zone.info.mitigated := true
+                    if deleteOnMitigation
+                        safeDeleteZone(zone)
+                        array.remove(allZones, i)
