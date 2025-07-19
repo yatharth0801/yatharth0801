@@ -1,0 +1,113 @@
+//@version=6
+indicator('Supply & Demand Zones - Fixed', overlay=true, max_boxes_count=100, max_lines_count=100)
+
+// Settings
+pivotLength = input.int(5, "Pivot Length", minval=1, maxval=20)
+maxZones = input.int(5, "Max Zones", minval=1, maxval=20)
+zoneThickness = input.float(0.0005, "Zone Thickness %", minval=0.0001, maxval=0.01, step=0.0001)
+
+// Colors
+supplyColor = input.color(color.new(color.red, 80), "Supply Color")
+demandColor = input.color(color.new(color.blue, 80), "Demand Color")
+
+// Arrays to store zones
+var supplyZones = array.new<box>()
+var demandZones = array.new<box>()
+
+// Function to detect swing highs
+isSwingHigh() =>
+    if bar_index < pivotLength
+        false
+    else
+        pivot = high[pivotLength]
+        isHigh = true
+        for i = 0 to pivotLength - 1
+            if pivot <= high[i]
+                isHigh := false
+                break
+        for i = pivotLength + 1 to pivotLength * 2
+            if pivot <= high[i]
+                isHigh := false
+                break
+        isHigh
+
+// Function to detect swing lows  
+isSwingLow() =>
+    if bar_index < pivotLength
+        false
+    else
+        pivot = low[pivotLength]
+        isLow = true
+        for i = 0 to pivotLength - 1
+            if pivot >= low[i]
+                isLow := false
+                break
+        for i = pivotLength + 1 to pivotLength * 2
+            if pivot >= low[i]
+                isLow := false
+                break
+        isLow
+
+// Main logic
+if barstate.isconfirmed
+    // Check for supply zones (swing highs)
+    if isSwingHigh()
+        swingPrice = high[pivotLength]
+        swingBar = bar_index - pivotLength
+        
+        // Create zone with fixed price levels
+        zoneTop = swingPrice
+        zoneBottom = swingPrice * (1 - zoneThickness)
+        
+        // Remove oldest zone if at max capacity
+        if array.size(supplyZones) >= maxZones
+            oldBox = array.shift(supplyZones)
+            box.delete(oldBox)
+        
+        // Create new supply zone box
+        newBox = box.new(
+            left=swingBar, 
+            top=zoneTop, 
+            right=swingBar + 1, 
+            bottom=zoneBottom,
+            bgcolor=supplyColor,
+            border_color=color.red,
+            border_width=1,
+            extend=extend.right
+        )
+        
+        array.push(supplyZones, newBox)
+        
+        // Add label
+        label.new(swingBar, zoneTop, "S", style=label.style_label_down, color=color.red, textcolor=color.white, size=size.small)
+    
+    // Check for demand zones (swing lows)
+    if isSwingLow()
+        swingPrice = low[pivotLength]
+        swingBar = bar_index - pivotLength
+        
+        // Create zone with fixed price levels
+        zoneBottom = swingPrice
+        zoneTop = swingPrice * (1 + zoneThickness)
+        
+        // Remove oldest zone if at max capacity
+        if array.size(demandZones) >= maxZones
+            oldBox = array.shift(demandZones)
+            box.delete(oldBox)
+        
+        // Create new demand zone box
+        newBox = box.new(
+            left=swingBar,
+            top=zoneTop,
+            right=swingBar + 1,
+            bottom=zoneBottom,
+            bgcolor=demandColor,
+            border_color=color.blue,
+            border_width=1,
+            extend=extend.right
+        )
+        
+        array.push(demandZones, newBox)
+        
+        // Add label
+        label.new(swingBar, zoneBottom, "D", style=label.style_label_up, color=color.blue, textcolor=color.white, size=size.small)

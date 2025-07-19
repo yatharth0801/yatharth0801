@@ -233,11 +233,15 @@ createZone(isSupply, zoneTop, zoneBottom, barIdx, tf = "") =>
     else if tf == htf2 and enableHTF2
         boxColor := isSupply ? supplyHTF2Color : demandHTF2Color
     
-    // Create box with extend.right so it doesn't move with chart
-    boxId = box.new(barIdx, zoneTop, barIdx + 1, zoneBottom, bgcolor=boxColor, border_color=borderColor, border_width=1, extend=extend.right)
+    // Create box with correct coordinates: left, top, right, bottom
+    // For supply zones: top should be higher price, bottom should be lower price
+    // For demand zones: top should be higher price, bottom should be lower price
+    actualTop = math.max(zoneTop, zoneBottom)
+    actualBottom = math.min(zoneTop, zoneBottom)
+    boxId = box.new(barIdx, actualTop, barIdx + 1, actualBottom, bgcolor=boxColor, border_color=borderColor, border_width=1, extend=extend.right)
     
     // Create 50% line with extend.right
-    fiftyLevel = (zoneTop + zoneBottom) / 2
+    fiftyLevel = (actualTop + actualBottom) / 2
     fiftyLine = show50Percent ? line.new(barIdx, fiftyLevel, barIdx + 1, fiftyLevel, color=fiftyColor, style=line.style_dashed, width=1, extend=extend.right) : na
     
     // Create label
