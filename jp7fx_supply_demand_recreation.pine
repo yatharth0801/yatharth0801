@@ -297,8 +297,10 @@ checkZoneMitigation() =>
 if barstate.isconfirmed
     // Check for new swing highs (Supply zones)
     if isSwingHigh(pivotPeriod)
-        zoneTop = getPriceForDrawing(true)[pivotPeriod]
-        zoneBottom = zoneTop * 0.9995  // Thicker zone for better visibility
+        // Get the actual price at the swing point and store it as fixed values
+        swingHigh = getPriceForDrawing(true)[pivotPeriod]
+        zoneTop = swingHigh
+        zoneBottom = swingHigh * 0.9995  // Create zone thickness
         strength = calculateZoneStrength(zoneTop, zoneBottom)
         
         if strength >= zoneStrengthMin
@@ -309,8 +311,10 @@ if barstate.isconfirmed
     
     // Check for new swing lows (Demand zones)
     if isSwingLow(pivotPeriod)
-        zoneBottom = getPriceForDrawing(false)[pivotPeriod]
-        zoneTop = zoneBottom * 1.0005  // Thicker zone for better visibility
+        // Get the actual price at the swing point and store it as fixed values
+        swingLow = getPriceForDrawing(false)[pivotPeriod]
+        zoneBottom = swingLow
+        zoneTop = swingLow * 1.0005  // Create zone thickness
         strength = calculateZoneStrength(zoneTop, zoneBottom)
         
         if strength >= zoneStrengthMin
