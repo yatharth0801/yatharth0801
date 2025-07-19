@@ -240,44 +240,46 @@ createZone(isSupply, zoneTop, zoneBottom, barIdx, tf = "") =>
 
 // Update zone extensions
 updateZoneExtensions() =>
-    for i = 0 to array.size(currentZones) - 1
-        zone = array.get(currentZones, i)
-        if not na(zone.boxId)
-            box.set_right(zone.boxId, bar_index + 50)
-        if not na(zone.fiftyLine)
-            line.set_x2(zone.fiftyLine, bar_index + 50)
+    if array.size(currentZones) > 0
+        for i = 0 to array.size(currentZones) - 1
+            zone = array.get(currentZones, i)
+            if not na(zone.boxId)
+                box.set_right(zone.boxId, bar_index + 50)
+            if not na(zone.fiftyLine)
+                line.set_x2(zone.fiftyLine, bar_index + 50)
 
 // Check zone mitigation
 checkZoneMitigation() =>
-    for i = array.size(currentZones) - 1 to 0
-        zone = array.get(currentZones, i)
-        if not zone.mitigated
-            if zone.isSupply
-                if low <= zone.bottom
-                    zone.mitigated := true
-                    if alertOnZoneMitigation
-                        alert("Supply zone mitigated at " + str.tostring(zone.bottom), alert.freq_once_per_bar)
-                    if deleteOnMitigation
-                        if not na(zone.boxId)
-                            box.delete(zone.boxId)
-                        if not na(zone.fiftyLine)
-                            line.delete(zone.fiftyLine)
-                        if not na(zone.labelId)
-                            label.delete(zone.labelId)
-                        array.remove(currentZones, i)
-            else
-                if high >= zone.top
-                    zone.mitigated := true
-                    if alertOnZoneMitigation
-                        alert("Demand zone mitigated at " + str.tostring(zone.top), alert.freq_once_per_bar)
-                    if deleteOnMitigation
-                        if not na(zone.boxId)
-                            box.delete(zone.boxId)
-                        if not na(zone.fiftyLine)
-                            line.delete(zone.fiftyLine)
-                        if not na(zone.labelId)
-                            label.delete(zone.labelId)
-                        array.remove(currentZones, i)
+    if array.size(currentZones) > 0
+        for i = array.size(currentZones) - 1 to 0
+            zone = array.get(currentZones, i)
+            if not zone.mitigated
+                if zone.isSupply
+                    if low <= zone.bottom
+                        zone.mitigated := true
+                        if alertOnZoneMitigation
+                            alert("Supply zone mitigated at " + str.tostring(zone.bottom), alert.freq_once_per_bar)
+                        if deleteOnMitigation
+                            if not na(zone.boxId)
+                                box.delete(zone.boxId)
+                            if not na(zone.fiftyLine)
+                                line.delete(zone.fiftyLine)
+                            if not na(zone.labelId)
+                                label.delete(zone.labelId)
+                            array.remove(currentZones, i)
+                else
+                    if high >= zone.top
+                        zone.mitigated := true
+                        if alertOnZoneMitigation
+                            alert("Demand zone mitigated at " + str.tostring(zone.top), alert.freq_once_per_bar)
+                        if deleteOnMitigation
+                            if not na(zone.boxId)
+                                box.delete(zone.boxId)
+                            if not na(zone.fiftyLine)
+                                line.delete(zone.fiftyLine)
+                            if not na(zone.labelId)
+                                label.delete(zone.labelId)
+                            array.remove(currentZones, i)
 
 // ========================================
 // MAIN LOGIC
@@ -382,15 +384,15 @@ barcolor(colorBarsOnZoneCreation and (isSwingHigh(0) or isSwingLow(0)) ? zoneCre
 
 // Clean up old order blocks (keep last 20)
 if array.size(orderBlocks) > 20
-    for i = 0 to array.size(orderBlocks) - 21
-        ob = array.get(orderBlocks, i)
+    while array.size(orderBlocks) > 20
+        ob = array.get(orderBlocks, 0)
         if not na(ob.labelId)
             label.delete(ob.labelId)
-    array.clear(orderBlocks)
+        array.remove(orderBlocks, 0)
 
 // Performance optimization - limit zone history
 if array.size(currentZones) > maxZones * 2
-    for i = 0 to array.size(currentZones) - maxZones - 1
+    for i = array.size(currentZones) - 1 to maxZones
         zone = array.get(currentZones, i)
         if bar_index - zone.leftBar > maxBarsValid
             if not na(zone.boxId)
