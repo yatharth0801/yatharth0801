@@ -339,8 +339,11 @@ if showOrderBlocks and barstate.isconfirmed
 htf1Valid = enableHTF1 and timeframe.in_seconds() < timeframe.in_seconds(htf1)
 htf2Valid = enableHTF2 and timeframe.in_seconds() < timeframe.in_seconds(htf2)
 
-[htfHigh, htfLow, htfClose, htfOpen] = htf1Valid ? request.security(syminfo.tickerid, htf1, [high, low, close, open]) : [na, na, na, na]
-[htf2High, htf2Low, htf2Close, htf2Open] = htf2Valid ? request.security(syminfo.tickerid, htf2, [high, low, close, open]) : [na, na, na, na]
+// HTF1 Data
+[htfHigh, htfLow, htfClose, htfOpen] = request.security(syminfo.tickerid, htf1, [high, low, close, open])
+
+// HTF2 Data  
+[htf2High, htf2Low, htf2Close, htf2Open] = request.security(syminfo.tickerid, htf2, [high, low, close, open])
 
 // HTF1 Analysis
 if htf1Valid
