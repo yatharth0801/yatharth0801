@@ -1,0 +1,105 @@
+//@version=5
+indicator('Supply & Demand / OrderBlocks - MTF [By JP7FX Style]', overlay=true, max_lines_count=500)
+
+// ———— Inputs ————
+lookbackBars    = input.int(500,   'Lookback Bars', minval=50)
+minZoneStrength = input.int(2,     'Minimum Zone Touches', minval=1)
+showOB          = input.bool(true, 'Show Order Blocks')
+showHTF         = input.bool(true, 'Show Higher Timeframe Zones')
+htf             = input.timeframe('4H', 'Higher Timeframe')
+
+// ———— Colors ————
+supplyColor     = color.new(#ff0000, 80)
+demandColor     = color.new(#0066ff, 80)
+bullishOBColor  = color.new(#00ff00, 70)
+bearishOBColor  = color.new(#ff0000, 70)
+htfSupplyColor  = color.new(#990000, 90)
+htfDemandColor  = color.new(#000099, 90)
+
+// ———— Functions ————
+// Swing Detection with proper line continuation
+isSwingHigh(offset) =>
+    offset >= 1 and offset < bar_index and
+    high[offset] > high[offset + 1] and 
+    high[offset] > high[offset - 1]
+
+isSwingLow(offset) =>
+    offset >= 1 and offset < bar_index and
+    low[offset] < low[offset + 1] and 
+    low[offset] < low[offset - 1]
+
+// Order Block Detection
+isBullishOB(offset) =>
+    offset >= 2 and offset < bar_index and
+    close[offset] > open[offset] and 
+    close[offset + 1] < open[offset + 1] and 
+    close[offset + 2] > open[offset + 2]
+
+isBearishOB(offset) =>
+    offset >= 2 and offset < bar_index and
+    close[offset] < open[offset] and 
+    close[offset + 1] > open[offset + 1] and 
+    close[offset + 2] < open[offset + 2]
+
+// Zone Strength Calculation - Fixed to avoid out of bounds
+zoneStrength(price, isHigh) =>
+    var int touches = 0
+    touches := 0  // Reset on each call
+    maxLookback = math.min(lookbackBars, bar_index)
+    for i = 0 to maxLookback
+        if isHigh 
+            if high[i] >= price * 0.999 and high[i] <= price * 1.001
+                touches += 1
+        else
+            if low[i] <= price * 1.001 and low[i] >= price * 0.999
+                touches += 1
+    touches
+
+// ———— Main Logic ————
+// Process zones only on confirmed bars to avoid repainting
+if barstate.isconfirmed
+    maxBars = math.min(lookbackBars, bar_index - 2)  // Avoid accessing future bars
+    
+    for i = 1 to maxBars  // Start from 1 to ensure we have previous bars
+        // Supply Zones
+        if isSwingHigh(i)
+            str = zoneStrength(high[i], true)
+            if str >= minZoneStrength
+                // Create box extending to the right
+                rightExtension = bar_index + 50
+                boxId = box.new(bar_index - i, high[i] * 0.9975, rightExtension, high[i], 
+                      bgcolor=supplyColor, border_color=#ff0000, border_width=1)
+                labelId = label.new(bar_index - i, high[i], 
+                      str > 2 ? 'Supply ' + str.tostring(str) : 'Supply',
+                      color=#ffffff, style=label.style_label_down, textcolor=#ff0000)
+        
+        // Demand Zones
+        if isSwingLow(i)
+            str = zoneStrength(low[i], false)
+            if str >= minZoneStrength
+                // Create box extending to the right
+                rightExtension = bar_index + 50
+                boxId = box.new(bar_index - i, low[i], rightExtension, low[i] * 1.0025,
+                      bgcolor=demandColor, border_color=#0066ff, border_width=1)
+                labelId = label.new(bar_index - i, low[i], 
+                      str > 2 ? 'Demand ' + str.tostring(str) : 'Demand',
+                      color=#ffffff, style=label.style_label_up, textcolor=#0066ff)
+
+// Order Blocks
+if showOB and barstate.isconfirmed
+    maxBars = math.min(lookbackBars, bar_index - 2)
+    for i = 2 to maxBars  // Start from 2 since we need offset + 2
+        if isBullishOB(i)
+            label.new(bar_index - i, low[i], 'B-OB', 
+                  color=bullishOBColor, style=label.style_label_up, textcolor=#ffffff)
+        
+        if isBearishOB(i)
+            label.new(bar_index - i, high[i], 'S-OB',
+                  color=bearishOBColor, style=label.style_label_down, textcolor=#ffffff)
+
+// Higher Timeframe Zones - Fixed security call
+if showHTF
+    [htfHigh, htfLow] = request.security(syminfo.tickerid, htf, [high, low])
+    
+    plot(showHTF ? htfHigh : na, 'HTF High', color=htfSupplyColor, linewidth=2)
+    plot(showHTF ? htfLow : na, 'HTF Low', color=htfDemandColor, linewidth=2)
