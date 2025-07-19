@@ -24,9 +24,9 @@ obMinImbalance = input.float(0.1, "Minimum Imbalance %", minval=0.01, maxval=5.0
 // Multi-Timeframe
 group_mtf = "Multi-Timeframe"
 enableHTF1 = input.bool(true, "Enable Higher Timeframe 1", group=group_mtf)
-htf1 = input.timeframe("4H", "Higher Timeframe 1", group=group_mtf)
+htf1 = input.timeframe("240", "Higher Timeframe 1", group=group_mtf, tooltip="4H = 240, 1H = 60, 15m = 15, etc.")
 enableHTF2 = input.bool(false, "Enable Higher Timeframe 2", group=group_mtf)
-htf2 = input.timeframe("1D", "Higher Timeframe 2", group=group_mtf)
+htf2 = input.timeframe("1D", "Higher Timeframe 2", group=group_mtf, tooltip="Daily = 1D, Weekly = 1W, Monthly = 1M")
 showHTFLabels = input.bool(true, "Show HTF Labels", group=group_mtf)
 
 // Zone Management
@@ -335,11 +335,15 @@ if showOrderBlocks and barstate.isconfirmed
                 alert("Bearish Order Block detected", alert.freq_once_per_bar)
 
 // Higher Timeframe Analysis - Move request.security outside conditionals
-[htfHigh, htfLow, htfClose, htfOpen] = request.security(syminfo.tickerid, htf1, [high, low, close, open])
-[htf2High, htf2Low, htf2Close, htf2Open] = request.security(syminfo.tickerid, htf2, [high, low, close, open])
+// Only request HTF data if timeframes are valid and higher than current
+htf1Valid = enableHTF1 and timeframe.in_seconds() < timeframe.in_seconds(htf1)
+htf2Valid = enableHTF2 and timeframe.in_seconds() < timeframe.in_seconds(htf2)
+
+[htfHigh, htfLow, htfClose, htfOpen] = htf1Valid ? request.security(syminfo.tickerid, htf1, [high, low, close, open]) : [na, na, na, na]
+[htf2High, htf2Low, htf2Close, htf2Open] = htf2Valid ? request.security(syminfo.tickerid, htf2, [high, low, close, open]) : [na, na, na, na]
 
 // HTF1 Analysis
-if enableHTF1 and timeframe.in_seconds() < timeframe.in_seconds(htf1)
+if htf1Valid
     // HTF Supply zones
     if ta.change(htfHigh) != 0 and htfHigh > htfHigh[1]
         zoneTop = htfHigh
@@ -353,7 +357,7 @@ if enableHTF1 and timeframe.in_seconds() < timeframe.in_seconds(htf1)
         zone = createZone(false, zoneTop, zoneBottom, bar_index, htf1)
 
 // HTF2 Analysis
-if enableHTF2 and timeframe.in_seconds() < timeframe.in_seconds(htf2)
+if htf2Valid
     // HTF2 Supply zones
     if ta.change(htf2High) != 0 and htf2High > htf2High[1]
         zoneTop = htf2High
