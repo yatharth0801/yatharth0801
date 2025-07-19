@@ -219,22 +219,18 @@ createZone(isSupply, zoneTop, zoneBottom, barIdx, tf = "") =>
         boxColor := isSupply ? supplyHTF2Color : demandHTF2Color
     
     // Create box
-    boxId = box.new(barIdx, zoneTop, rightBar, zoneBottom, 
-                    bgcolor=boxColor, border_color=borderColor, border_width=1)
+    boxId = box.new(barIdx, zoneTop, rightBar, zoneBottom, bgcolor=boxColor, border_color=borderColor, border_width=1)
     
     // Create 50% line
     fiftyLevel = (zoneTop + zoneBottom) / 2
-    fiftyLine = show50Percent ? line.new(barIdx, fiftyLevel, rightBar, fiftyLevel, 
-                                        color=fiftyColor, style=line.style_dashed, width=1) : na
+    fiftyLine = show50Percent ? line.new(barIdx, fiftyLevel, rightBar, fiftyLevel, color=fiftyColor, style=line.style_dashed, width=1) : na
     
     // Create label
     labelText = isSupply ? "S" : "D"
     if tf != ""
         labelText += " " + tf
     
-    labelId = label.new(barIdx, isSupply ? zoneTop : zoneBottom, labelText,
-                       style=isSupply ? label.style_label_down : label.style_label_up,
-                       color=boxColor, textcolor=color.white, size=size.small)
+    labelId = label.new(barIdx, isSupply ? zoneTop : zoneBottom, labelText, style=isSupply ? label.style_label_down : label.style_label_up, color=boxColor, textcolor=color.white, size=size.small)
     
     // Create zone object
     newZone = Zone.new(zoneTop, zoneBottom, barIdx, rightBar, 1, isSupply, tf, boxId, fiftyLine, labelId, false)
@@ -319,9 +315,7 @@ if showOrderBlocks and barstate.isconfirmed
         if isBullishOrderBlock(i)
             obHigh = high[i]
             obLow = low[i]
-            labelId = label.new(bar_index - i, obLow, "BOB",
-                              style=label.style_label_up, color=bullishOBColor, 
-                              textcolor=color.white, size=size.small)
+            labelId = label.new(bar_index - i, obLow, "BOB", style=label.style_label_up, color=bullishOBColor, textcolor=color.white, size=size.small)
             
             ob = OrderBlock.new(obHigh, obLow, bar_index - i, true, labelId)
             array.push(orderBlocks, ob)
@@ -332,9 +326,7 @@ if showOrderBlocks and barstate.isconfirmed
         if isBearishOrderBlock(i)
             obHigh = high[i]
             obLow = low[i]
-            labelId = label.new(bar_index - i, obHigh, "SOB",
-                              style=label.style_label_down, color=bearishOBColor, 
-                              textcolor=color.white, size=size.small)
+            labelId = label.new(bar_index - i, obHigh, "SOB", style=label.style_label_down, color=bearishOBColor, textcolor=color.white, size=size.small)
             
             ob = OrderBlock.new(obHigh, obLow, bar_index - i, false, labelId)
             array.push(orderBlocks, ob)
