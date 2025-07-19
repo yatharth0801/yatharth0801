@@ -1,4 +1,4 @@
-//@version=5
+//@version=6
 indicator('Supply & Demand / OrderBlocks - MTF [JP7FX Recreation]', overlay=true, max_lines_count=500, max_boxes_count=500, max_labels_count=500)
 
 // ========================================
@@ -334,10 +334,12 @@ if showOrderBlocks and barstate.isconfirmed
             if alertOnOrderBlock
                 alert("Bearish Order Block detected", alert.freq_once_per_bar)
 
-// Higher Timeframe Analysis
+// Higher Timeframe Analysis - Move request.security outside conditionals
+[htfHigh, htfLow, htfClose, htfOpen] = request.security(syminfo.tickerid, htf1, [high, low, close, open])
+[htf2High, htf2Low, htf2Close, htf2Open] = request.security(syminfo.tickerid, htf2, [high, low, close, open])
+
+// HTF1 Analysis
 if enableHTF1 and timeframe.in_seconds() < timeframe.in_seconds(htf1)
-    [htfHigh, htfLow, htfClose, htfOpen] = request.security(syminfo.tickerid, htf1, [high, low, close, open])
-    
     // HTF Supply zones
     if ta.change(htfHigh) != 0 and htfHigh > htfHigh[1]
         zoneTop = htfHigh
@@ -350,9 +352,8 @@ if enableHTF1 and timeframe.in_seconds() < timeframe.in_seconds(htf1)
         zoneTop = zoneBottom * 1.002
         zone = createZone(false, zoneTop, zoneBottom, bar_index, htf1)
 
+// HTF2 Analysis
 if enableHTF2 and timeframe.in_seconds() < timeframe.in_seconds(htf2)
-    [htf2High, htf2Low, htf2Close, htf2Open] = request.security(syminfo.tickerid, htf2, [high, low, close, open])
-    
     // HTF2 Supply zones
     if ta.change(htf2High) != 0 and htf2High > htf2High[1]
         zoneTop = htf2High
